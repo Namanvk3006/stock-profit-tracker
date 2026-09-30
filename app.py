@@ -114,7 +114,7 @@ def delete(i):
 def clear():
     c=conn(); c.execute('DELETE FROM transactions'); c.commit(); c.close()
 
-def money(x): return f'₹{x:,.2f}'
+def money(x): return f'₹{x:,.0f}'
 
 def excel(df):
     out=BytesIO(); x=df.drop(columns=['ID']).copy(); x['Sell Date']=pd.to_datetime(x['Sell Date']).dt.date
@@ -124,7 +124,7 @@ def excel(df):
         for cell in ws[1]: cell.fill=fill; cell.font=font; cell.alignment=Alignment(horizontal='center'); cell.border=Border(bottom=side)
         for row in ws.iter_rows(min_row=2):
             row[2].number_format='dd mmm yyyy'; row[3].number_format='#,##0'
-            for j in [4,5,6,7]: row[j].number_format='₹#,##0.00'
+            for j in [4,5,6,7]: row[j].number_format='₹#,##0'
         tr=ws.max_row+2
         ws.cell(tr,1,'TOTAL')
         ws.cell(tr,4,int(x['Quantity'].sum()))
@@ -143,7 +143,7 @@ def excel(df):
         for r in vals:s.append(r)
         for c in s[1]:c.fill=fill;c.font=Font(color='FFFFFF',bold=True,size=14)
         for r in range(4,s.max_row+1):
-            s.cell(r,2).number_format='₹#,##0.00'
+            s.cell(r,2).number_format='₹#,##0'
         s.column_dimensions['A'].width=26;s.column_dimensions['B'].width=22
     return out.getvalue()
 
@@ -209,6 +209,47 @@ def pdf(df):
         ('ALIGN',(0,0),(-1,-1),'CENTER')
     ]))
     story += [status]
+
+    # Detailed transactions FIRST
+    story.append(Paragraph('Detailed Transactions',h2))
+    rows=[['Name','Stock','Sell Date','Qty','Buy','Sell','Profit/Share','Total Profit']]
+    for _,r in df.iterrows():
+        rows.append([
+            r['Name'],r['Stock Name'],
+            pd.to_datetime(r['Sell Date']).strftime('%d %b %Y'),
+            f"{int(r['Quantity']):,}",
+            money(r['Buying Price']),money(r['Selling Price']),
+            money(r['Profit per Share']),money(r['Total Profit'])
+        ])
+    tb=Table(rows,repeatRows=1,colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm])
+    tb.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
+        ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+        ('GRID',(0,0),(-1,-1),.3,colors.grey),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F5F8FA')]),
+        ('FONTSIZE',(0,0),(-1,-1),8),
+        ('ALIGN',(2,1),(-1,-1),'RIGHT')
+    ]))
+    total_row=Table(
+        [['TOTAL','','',f"{qty:,}",'', '', '',money(profit)]],
+        colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm]
+    )
+    total_row.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1),colors.HexColor('#E2F0D9')),
+        ('FONTNAME',(0,0),(-1,-1),'Helvetica-Bold'),
+        ('GRID',(0,0),(-1,-1),.4,colors.HexColor('#7F8C8D')),
+        ('ALIGN',(3,0),(3,0),'RIGHT'),
+        ('ALIGN',(7,0),(7,0),'RIGHT'),
+        ('FONTSIZE',(0,0),(-1,-1),8)
+    ]))
+    story += [
+        tb,
+        total_row,
+        Spacer(1,5*mm)
+    ]
+
+    story.append(PageBreak())
 
     # Analytics tables
     person=df.groupby('Name',as_index=False).agg(
@@ -323,47 +364,6 @@ def pdf(df):
             story.append(RLImage(cp,width=250*mm,height=90*mm))
             story.append(Spacer(1,3*mm))
 
-        story.append(PageBreak())
-        story.append(Paragraph('Detailed Transactions',h2))
-        rows=[['Name','Stock','Sell Date','Qty','Buy','Sell','Profit/Share','Total Profit']]
-        for _,r in df.iterrows():
-            rows.append([
-                r['Name'],r['Stock Name'],
-                pd.to_datetime(r['Sell Date']).strftime('%d %b %Y'),
-                f"{int(r['Quantity']):,}",
-                pdf_money(r['Buying Price']),pdf_money(r['Selling Price']),
-                pdf_money(r['Profit per Share']),pdf_money(r['Total Profit'])
-            ])
-        rows.append([
-            'TOTAL','', '',
-            f"{qty:,}", '',
-            pdf_money(sales/qty) if qty else 'Rs. 0.00',
-            '',
-            pdf_money(profit)
-        ])
-        tb=Table(rows,repeatRows=1,colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm])
-        tb.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
-            ('TEXTCOLOR',(0,0),(-1,0),colors.white),
-            ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
-            ('GRID',(0,0),(-1,-1),.3,colors.grey),
-            ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F5F8FA')]),
-            ('FONTSIZE',(0,0),(-1,-1),8),
-            ('ALIGN',(2,1),(-1,-1),'RIGHT'),
-            ('BACKGROUND',(0,-1),(-1,-1),colors.HexColor('#E2F0D9')),
-            ('FONTNAME',(0,-1),(-1,-1),'Helvetica-Bold'),
-            ('LINEABOVE',(0,-1),(-1,-1),.8,colors.HexColor('#1F4E78'))
-        ]))
-        story += [
-            tb,
-            Spacer(1,4*mm),
-            Paragraph(
-                'Profit per Share = Selling Price − Buying Price. '
-                'Total Profit = Profit per Share × Quantity. '
-                'No brokerage, STT, GST, taxes, or other charges are included.',
-                small
-            )
-        ]
         doc.build(story)
 
     return out.getvalue()
