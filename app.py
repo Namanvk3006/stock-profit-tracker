@@ -18,6 +18,47 @@ from reportlab.lib.utils import ImageReader
 APP_DIR=Path(__file__).resolve().parent; DB=APP_DIR/'stock_tracker.db'
 st.set_page_config(page_title='Stock Profit Tracker Pro',page_icon='📈',layout='wide')
 
+st.markdown("""
+<style>
+@media (max-width: 640px) {
+    div[data-baseweb="tab-list"] {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        gap: 0 !important;
+        scrollbar-width: none !important;
+        -webkit-overflow-scrolling: touch !important;
+        width: 100% !important;
+    }
+
+    div[data-baseweb="tab-list"]::-webkit-scrollbar {
+        display: none !important;
+    }
+
+    div[data-baseweb="tab-list"] > button {
+        flex: 0 0 auto !important;
+        white-space: nowrap !important;
+        min-width: max-content !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+        font-size: 13px !important;
+    }
+
+    div[data-baseweb="tab"] {
+        flex: 0 0 auto !important;
+        white-space: nowrap !important;
+    }
+
+    section[data-testid="stMain"] {
+        padding-left: 0.65rem !important;
+        padding-right: 0.65rem !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 def conn():
     c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 
