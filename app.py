@@ -300,50 +300,182 @@ def pdf(df):
     return out.getvalue()
 
 
-init(); df=getdf(); st.title('📈 Stock Profit Tracker Pro'); st.caption('Local-first stock transaction tracker with automatic calculations, audit checks, Excel and PDF reports.')
-with st.sidebar:
-    st.header('➕ Add Transaction')
-    with st.form('add',clear_on_submit=True):
-        person=st.text_input('Name',placeholder='Enter any name — Papa, Mummy, Naman, Rahul, etc.'); stock=st.text_input('Stock Name'); d=st.date_input('Sell Date',date.today()); q=st.number_input('Quantity',1,10000000,1,1); b=st.number_input('Buying Price (₹)',0.0,100000000.0,0.0,.10); s=st.number_input('Selling Price (₹)',0.0,100000000.0,0.0,.10); ok=st.form_submit_button('Add Transaction',type='primary',use_container_width=True)
-        if ok:
-            if not stock.strip(): st.error('Stock name is required.')
-            else: add(person,stock,d,q,b,s); st.success(f'Added. Profit/share: {money(s-b)} | Total: {money((s-b)*q)}'); st.rerun()
-    st.divider(); st.header('📥 Import')
-    up=st.file_uploader('Excel/CSV',type=['xlsx','csv'])
-    if up and st.button('Import Rows',use_container_width=True):
-        try:
-            imp=pd.read_csv(up) if up.name.lower().endswith('.csv') else pd.read_excel(up)
-            req=['Name','Stock Name','Sell Date','Quantity','Buying Price','Selling Price']; miss=[x for x in req if x not in imp.columns]
-            if miss: st.error('Missing: '+', '.join(miss))
-            else:
-                c=conn()
-                for _,r in imp.iterrows(): c.execute('INSERT INTO transactions(person,stock_name,sell_date,quantity,buying_price,selling_price) VALUES(?,?,?,?,?,?)',(str(r['Name']),str(r['Stock Name']),pd.to_datetime(r['Sell Date']).date().isoformat(),int(float(r['Quantity'])),float(r['Buying Price']),float(r['Selling Price'])))
-                c.commit();c.close();st.success(f'Imported {len(imp)} rows.');st.rerun()
-        except Exception as e: st.error(str(e))
-    st.divider(); st.header('🧹 Data Management')
-    if st.button('Delete All Transactions',use_container_width=True): st.session_state.confirm=True
-    if st.session_state.get('confirm'):
-        st.warning('This permanently deletes the local transaction database.'); a,bx=st.columns(2)
-        if a.button('Confirm'): clear();st.session_state.confirm=False;st.rerun()
-        if bx.button('Cancel'): st.session_state.confirm=False;st.rerun()
+init(); df=getdf()
 
-profit=float(df['Total Profit'].sum()) if len(df) else 0; inv=float((df['Buying Price']*df['Quantity']).sum()) if len(df) else 0; sales=float((df['Selling Price']*df['Quantity']).sum()) if len(df) else 0; qty=int(df['Quantity'].sum()) if len(df) else 0
-k=st.columns(5); k[0].metric('Total Profit',money(profit)); k[1].metric('Investment',money(inv)); k[2].metric('Sales Value',money(sales)); k[3].metric('Quantity',f'{qty:,}'); k[4].metric('Return',f'{profit/inv*100:.2f}%' if inv else '0.00%')
+# Admin access: no signup/login system. Visitors remain read-only unless
+# they know the admin password stored privately in Streamlit Secrets.
+try:
+    ADMIN_PASSWORD=st.secrets["ADMIN_PASSWORD"]
+except Exception:
+    ADMIN_PASSWORD=""
+
+st.title('📈 Stock Profit Tracker Pro')
+st.caption('Public read-only stock analytics dashboard. Transaction changes are restricted to Admin mode.')
+
+with st.sidebar:
+    st.header('🔐 Admin Access')
+    if ADMIN_PASSWORD:
+        entered_password=st.text_input('Admin Password',type='password',placeholder='Enter admin password')
+        is_admin=bool(entered_password) and entered_password==ADMIN_PASSWORD
+        if is_admin:
+            st.success('Admin mode enabled.')
+        elif entered_password:
+            st.error('Incorrect admin password.')
+        else:
+            st.info('Viewer mode — transaction data cannot be changed.')
+    else:
+        is_admin=False
+        st.warning('Admin access is not configured. The app is read-only.')
+
+    st.divider()
+
+    if is_admin:
+        st.header('➕ Add Transaction')
+        with st.form('add',clear_on_submit=True):
+            person=st.text_input('Name',placeholder='Enter any name — Papa, Mummy, Naman, Rahul, etc.')
+            stock=st.text_input('Stock Name')
+            d=st.date_input('Sell Date',date.today())
+            q=st.number_input('Quantity',1,10000000,1,1)
+            b=st.number_input('Buying Price (₹)',0.0,100000000.0,0.0,.10)
+            s=st.number_input('Selling Price (₹)',0.0,100000000.0,0.0,.10)
+            ok=st.form_submit_button('Add Transaction',type='primary',use_container_width=True)
+            if ok:
+                if not stock.strip():
+                    st.error('Stock name is required.')
+                else:
+                    add(person,stock,d,q,b,s)
+                    st.success(f'Added. Profit/share: {money(s-b)} | Total: {money((s-b)*q)}')
+                    st.rerun()
+
+        st.divider()
+        st.header('📥 Import')
+        up=st.file_uploader('Excel/CSV',type=['xlsx','csv'])
+        if up and st.button('Import Rows',use_container_width=True):
+            try:
+                imp=pd.read_csv(up) if up.name.lower().endswith('.csv') else pd.read_excel(up)
+                req=['Name','Stock Name','Sell Date','Quantity','Buying Price','Selling Price']
+                miss=[x for x in req if x not in imp.columns]
+                if miss:
+                    st.error('Missing: '+', '.join(miss))
+                else:
+                    c=conn()
+                    for _,r in imp.iterrows():
+                        c.execute(
+                            'INSERT INTO transactions(person,stock_name,sell_date,quantity,buying_price,selling_price) VALUES(?,?,?,?,?,?)',
+                            (str(r['Name']),str(r['Stock Name']),
+                             pd.to_datetime(r['Sell Date']).date().isoformat(),
+                             int(float(r['Quantity'])),float(r['Buying Price']),float(r['Selling Price']))
+                        )
+                    c.commit(); c.close()
+                    st.success(f'Imported {len(imp)} rows.')
+                    st.rerun()
+            except Exception as e:
+                st.error(str(e))
+
+        st.divider()
+        st.header('🧹 Data Management')
+        if st.button('Delete All Transactions',use_container_width=True):
+            st.session_state.confirm=True
+        if st.session_state.get('confirm'):
+            st.warning('This permanently deletes the transaction database.')
+            a,bx=st.columns(2)
+            if a.button('Confirm'):
+                clear()
+                st.session_state.confirm=False
+                st.rerun()
+            if bx.button('Cancel'):
+                st.session_state.confirm=False
+                st.rerun()
+    else:
+        st.header('👁️ Viewer Mode')
+        st.caption('You can view analytics and download reports. Only Admin can add, import, or delete transactions.')
+
+profit=float(df['Total Profit'].sum()) if len(df) else 0
+inv=float((df['Buying Price']*df['Quantity']).sum()) if len(df) else 0
+sales=float((df['Selling Price']*df['Quantity']).sum()) if len(df) else 0
+qty=int(df['Quantity'].sum()) if len(df) else 0
+
+k=st.columns(5)
+k[0].metric('Total Profit',money(profit))
+k[1].metric('Investment',money(inv))
+k[2].metric('Sales Value',money(sales))
+k[3].metric('Quantity',f'{qty:,}')
+k[4].metric('Return',f'{profit/inv*100:.2f}%' if inv else '0.00%')
+
 t1,t2,t3=st.tabs(['📋 Transactions','📊 Analytics','📤 Export'])
+
 with t1:
     if len(df):
-        v=df.copy();v['Sell Date']=pd.to_datetime(v['Sell Date']).dt.strftime('%d %b %Y'); st.dataframe(v.drop(columns=['ID']),use_container_width=True,hide_index=True)
-        opts={f"#{int(r['ID'])} — {r['Stock Name']} — {r['Sell Date']} — {money(r['Total Profit'])}":int(r['ID']) for _,r in df.iterrows()}; sel=st.selectbox('Delete transaction',list(opts))
-        if st.button('Delete Selected'): delete(opts[sel]);st.rerun()
-    else: st.info('No transactions yet.')
+        v=df.copy()
+        v['Sell Date']=pd.to_datetime(v['Sell Date']).dt.strftime('%d %b %Y')
+        st.dataframe(v.drop(columns=['ID']),use_container_width=True,hide_index=True)
+
+        if is_admin:
+            opts={f"#{int(r['ID'])} — {r['Stock Name']} — {r['Sell Date']} — {money(r['Total Profit'])}":int(r['ID']) for _,r in df.iterrows()}
+            sel=st.selectbox('Delete transaction',list(opts))
+            if st.button('Delete Selected',type='secondary'):
+                delete(opts[sel])
+                st.rerun()
+    else:
+        st.info('No transactions yet.')
+
 with t2:
     if len(df):
-        a,b=st.columns(2); ps=df.groupby('Name')['Total Profit'].sum(); ss=df.groupby('Stock Name')['Total Profit'].sum(); a.subheader('Profit by Person');a.bar_chart(ps);b.subheader('Profit by Stock');b.bar_chart(ss)
-        m=df.copy();m['Month']=pd.to_datetime(m['Sell Date']).dt.to_period('M').astype(str);st.subheader('Monthly Profit');st.line_chart(m.groupby('Month')['Total Profit'].sum())
-        audit=df.copy();audit['Calculated Profit/Share']=(audit['Selling Price']-audit['Buying Price']).round(2);audit['Calculated Total Profit']=(audit['Calculated Profit/Share']*audit['Quantity']).round(2);audit['Profit/Share OK']=audit['Profit per Share'].round(2)==audit['Calculated Profit/Share'];audit['Total Profit OK']=audit['Total Profit'].round(2)==audit['Calculated Total Profit'];st.subheader('Calculation Audit');st.dataframe(audit[['Stock Name','Profit per Share','Calculated Profit/Share','Profit/Share OK','Total Profit','Calculated Total Profit','Total Profit OK']],use_container_width=True,hide_index=True);st.success('All calculations are correct.') if audit['Profit/Share OK'].all() and audit['Total Profit OK'].all() else st.error('Calculation mismatch detected.')
-    else: st.info('Add transactions to see analytics.')
+        a,b=st.columns(2)
+        ps=df.groupby('Name')['Total Profit'].sum()
+        ss=df.groupby('Stock Name')['Total Profit'].sum()
+        a.subheader('Profit by Person'); a.bar_chart(ps)
+        b.subheader('Profit by Stock'); b.bar_chart(ss)
+
+        m=df.copy()
+        m['Month']=pd.to_datetime(m['Sell Date']).dt.to_period('M').astype(str)
+        st.subheader('Monthly Profit')
+        st.line_chart(m.groupby('Month')['Total Profit'].sum())
+
+        audit=df.copy()
+        audit['Calculated Profit/Share']=(audit['Selling Price']-audit['Buying Price']).round(2)
+        audit['Calculated Total Profit']=(audit['Calculated Profit/Share']*audit['Quantity']).round(2)
+        audit['Profit/Share OK']=audit['Profit per Share'].round(2)==audit['Calculated Profit/Share']
+        audit['Total Profit OK']=audit['Total Profit'].round(2)==audit['Calculated Total Profit']
+        st.subheader('Calculation Audit')
+        st.dataframe(
+            audit[['Stock Name','Profit per Share','Calculated Profit/Share','Profit/Share OK',
+                   'Total Profit','Calculated Total Profit','Total Profit OK']],
+            use_container_width=True,hide_index=True
+        )
+        if audit['Profit/Share OK'].all() and audit['Total Profit OK'].all():
+            st.success('All calculations are correct.')
+        else:
+            st.error('Calculation mismatch detected.')
+    else:
+        st.info('Add transactions to see analytics.')
+
 with t3:
     if len(df):
-        c1,c2=st.columns(2);c1.download_button('⬇️ Download Excel',excel(df),f'Stock_Profit_Report_{date.today()}.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',use_container_width=True);c2.download_button('⬇️ Download PDF',pdf(df),f'Stock_Profit_Report_{date.today()}.pdf','application/pdf',use_container_width=True);st.download_button('Download CSV Backup',df.drop(columns=['ID']).to_csv(index=False).encode(),f'Stock_Profit_Backup_{date.today()}.csv','text/csv',use_container_width=True)
-    else: st.info('Add transactions before exporting.')
-st.divider();st.caption('Data is stored locally in stock_tracker.db. Profit = Selling Price − Buying Price; Total Profit = Profit/Share × Quantity. No brokerage, STT, GST, taxes, or other charges are included.')
+        c1,c2=st.columns(2)
+        c1.download_button(
+            '⬇️ Download Excel',
+            excel(df),
+            f'Stock_Profit_Report_{date.today()}.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            use_container_width=True
+        )
+        c2.download_button(
+            '⬇️ Download PDF',
+            pdf(df),
+            f'Stock_Profit_Report_{date.today()}.pdf',
+            'application/pdf',
+            use_container_width=True
+        )
+        st.download_button(
+            'Download CSV Backup',
+            df.drop(columns=['ID']).to_csv(index=False).encode(),
+            f'Stock_Profit_Backup_{date.today()}.csv',
+            'text/csv',
+            use_container_width=True
+        )
+    else:
+        st.info('Add transactions before exporting.')
+
+st.divider()
+st.caption('Viewer mode is read-only. Profit = Selling Price − Buying Price; Total Profit = Profit/Share × Quantity. No brokerage, STT, GST, taxes, or other charges are included.')
