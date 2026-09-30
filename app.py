@@ -11,7 +11,9 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
+from reportlab.lib.utils import ImageReader
+
 
 APP_DIR=Path(__file__).resolve().parent; DB=APP_DIR/'stock_tracker.db'
 st.set_page_config(page_title='Stock Profit Tracker Pro',page_icon='📈',layout='wide')
@@ -67,17 +69,212 @@ def excel(df):
     return out.getvalue()
 
 def pdf(df):
-    out=BytesIO(); doc=SimpleDocTemplate(out,pagesize=landscape(A4),rightMargin=8*mm,leftMargin=8*mm,topMargin=8*mm,bottomMargin=8*mm)
-    stl=getSampleStyleSheet(); title=ParagraphStyle('t',parent=stl['Title'],alignment=TA_CENTER,fontSize=18)
-    inv=float((df['Buying Price']*df['Quantity']).sum()); sales=float((df['Selling Price']*df['Quantity']).sum()); profit=float(df['Total Profit'].sum())
-    story=[Paragraph('Stock Profit Tracker — Profit Report',title),Spacer(1,4*mm)]
-    sm=Table([['Transactions','Quantity','Investment','Sales Value','Total Profit'],[str(len(df)),f"{int(df['Quantity'].sum()):,}",money(inv),money(sales),money(profit)]],colWidths=[32*mm,32*mm,48*mm,48*mm,48*mm])
-    sm.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('BACKGROUND',(0,1),(-1,1),colors.HexColor('#E2F0D9')),('GRID',(0,0),(-1,-1),.4,colors.grey),('ALIGN',(0,0),(-1,-1),'CENTER'),('FONTSIZE',(0,0),(-1,-1),9)])); story += [sm,Spacer(1,5*mm)]
-    rows=[['Name','Stock','Sell Date','Qty','Buy','Sell','Profit/Share','Total Profit']]
-    for _,r in df.iterrows(): rows.append([r['Name'],r['Stock Name'],pd.to_datetime(r['Sell Date']).strftime('%d %b %Y'),f"{int(r['Quantity']):,}",money(r['Buying Price']),money(r['Selling Price']),money(r['Profit per Share']),money(r['Total Profit'])])
-    tb=Table(rows,repeatRows=1,colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm])
-    tb.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('GRID',(0,0),(-1,-1),.3,colors.grey),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F5F8FA')]),('FONTSIZE',(0,0),(-1,-1),8),('ALIGN',(2,1),(-1,-1),'RIGHT')]))
-    story += [tb,Spacer(1,4*mm),Paragraph('Profit per Share = Selling Price − Buying Price. Total Profit = Profit per Share × Quantity.',stl['BodyText'])]; doc.build(story); return out.getvalue()
+    """Create a PDF containing KPI summary, analytics tables/charts, and transactions."""
+    import tempfile
+    import os
+    import matplotlib.pyplot as plt
+
+    out=BytesIO()
+    doc=SimpleDocTemplate(
+        out,
+        pagesize=landscape(A4),
+        rightMargin=8*mm,leftMargin=8*mm,topMargin=8*mm,bottomMargin=8*mm
+    )
+    stl=getSampleStyleSheet()
+    title=ParagraphStyle('t',parent=stl['Title'],alignment=TA_CENTER,fontSize=18)
+    h2=ParagraphStyle('h2',parent=stl['Heading2'],fontSize=13,spaceBefore=5*mm,spaceAfter=2*mm)
+    small=ParagraphStyle('small',parent=stl['BodyText'],fontSize=8)
+
+    inv=float((df['Buying Price']*df['Quantity']).sum()) if len(df) else 0
+    sales=float((df['Selling Price']*df['Quantity']).sum()) if len(df) else 0
+    profit=float(df['Total Profit'].sum()) if len(df) else 0
+    qty=int(df['Quantity'].sum()) if len(df) else 0
+    ret=(profit/inv*100) if inv else 0
+    profitable=int((df['Total Profit']>0).sum())
+    loss=int((df['Total Profit']<0).sum())
+    breakeven=int((df['Total Profit']==0).sum())
+
+    story=[
+        Paragraph('Stock Profit Tracker — Profit & Analytics Report',title),
+        Spacer(1,4*mm)
+    ]
+
+    # KPI summary
+    sm=Table([
+        ['Transactions','Quantity','Investment','Sales Value','Total Profit','Return'],
+        [str(len(df)),f"{qty:,}",money(inv),money(sales),money(profit),f"{ret:.2f}%"]
+    ],colWidths=[30*mm,30*mm,45*mm,45*mm,45*mm,30*mm])
+    sm.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
+        ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+        ('BACKGROUND',(0,1),(-1,1),colors.HexColor('#E2F0D9')),
+        ('GRID',(0,0),(-1,-1),.4,colors.grey),
+        ('ALIGN',(0,0),(-1,-1),'CENTER'),
+        ('FONTSIZE',(0,0),(-1,-1),9)
+    ]))
+    story += [sm, Spacer(1,3*mm)]
+
+    status=Table([
+        ['Profitable Transactions','Loss Transactions','Break-even Transactions'],
+        [str(profitable),str(loss),str(breakeven)]
+    ],colWidths=[55*mm,55*mm,55*mm])
+    status.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#D9EAF7')),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+        ('GRID',(0,0),(-1,-1),.4,colors.grey),
+        ('ALIGN',(0,0),(-1,-1),'CENTER')
+    ]))
+    story += [status]
+
+    # Analytics tables
+    person=df.groupby('Name',as_index=False).agg(
+        Transactions=('ID','count'),
+        Quantity=('Quantity','sum'),
+        Investment=('Buying Price',lambda x: 0)
+    )
+    # Recalculate investment/sales at row level so grouped values are accurate.
+    tmp=df.copy()
+    tmp['Investment']=tmp['Buying Price']*tmp['Quantity']
+    tmp['Sales Value']=tmp['Selling Price']*tmp['Quantity']
+    person=tmp.groupby('Name',as_index=False).agg(
+        Transactions=('ID','count'),
+        Quantity=('Quantity','sum'),
+        Investment=('Investment','sum'),
+        Sales=('Sales Value','sum'),
+        Profit=('Total Profit','sum')
+    )
+
+    stock=tmp.groupby('Stock Name',as_index=False).agg(
+        Transactions=('ID','count'),
+        Quantity=('Quantity','sum'),
+        Investment=('Investment','sum'),
+        Sales=('Sales Value','sum'),
+        Profit=('Total Profit','sum')
+    )
+
+    tmp['Month']=pd.to_datetime(tmp['Sell Date']).dt.to_period('M').astype(str)
+    monthly=tmp.groupby('Month',as_index=False).agg(
+        Transactions=('ID','count'),
+        Quantity=('Quantity','sum'),
+        Investment=('Investment','sum'),
+        Sales=('Sales Value','sum'),
+        Profit=('Total Profit','sum')
+    )
+
+    def analytics_table(frame, first_col, widths):
+        headers=[first_col,'Transactions','Quantity','Investment','Sales','Profit']
+        rows=[headers]
+        for _,r in frame.iterrows():
+            rows.append([
+                str(r[first_col]),
+                f"{int(r['Transactions']):,}",
+                f"{int(r['Quantity']):,}",
+                money(r['Investment']),
+                money(r['Sales']),
+                money(r['Profit'])
+            ])
+        tb=Table(rows,colWidths=widths,repeatRows=1)
+        tb.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
+            ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+            ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+            ('GRID',(0,0),(-1,-1),.3,colors.grey),
+            ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F5F8FA')]),
+            ('FONTSIZE',(0,0),(-1,-1),8),
+            ('ALIGN',(1,1),(-1,-1),'RIGHT')
+        ]))
+        return tb
+
+    story += [
+        Paragraph('Analytics — Person-wise',h2),
+        analytics_table(person,'Name',[40*mm,30*mm,30*mm,45*mm,45*mm,45*mm]),
+        Paragraph('Analytics — Stock-wise',h2),
+        analytics_table(stock,'Stock Name',[40*mm,30*mm,30*mm,45*mm,45*mm,45*mm]),
+        Paragraph('Analytics — Monthly',h2),
+        analytics_table(monthly,'Month',[40*mm,30*mm,30*mm,45*mm,45*mm,45*mm])
+    ]
+
+    # Generate analytics charts temporarily and embed them in the PDF.
+    with tempfile.TemporaryDirectory() as td:
+        chart_paths=[]
+
+        def save_bar(labels, values, title_text, filename, ylabel='Profit (₹)'):
+            if len(labels)==0:
+                return None
+            fig,ax=plt.subplots(figsize=(8.5,3.2))
+            ax.bar(labels, values)
+            ax.set_title(title_text)
+            ax.set_ylabel(ylabel)
+            ax.tick_params(axis='x',rotation=35)
+            fig.tight_layout()
+            path=os.path.join(td,filename)
+            fig.savefig(path,dpi=150,bbox_inches='tight')
+            plt.close(fig)
+            return path
+
+        def save_line(labels, values, title_text, filename):
+            if len(labels)==0:
+                return None
+            fig,ax=plt.subplots(figsize=(8.5,3.2))
+            ax.plot(labels, values, marker='o')
+            ax.set_title(title_text)
+            ax.set_ylabel('Profit (₹)')
+            ax.tick_params(axis='x',rotation=35)
+            fig.tight_layout()
+            path=os.path.join(td,filename)
+            fig.savefig(path,dpi=150,bbox_inches='tight')
+            plt.close(fig)
+            return path
+
+        p=save_bar(person['Name'].tolist(),person['Profit'].tolist(),'Profit by Person','profit_by_person.png')
+        if p: chart_paths.append(p)
+        p=save_bar(stock['Stock Name'].tolist(),stock['Profit'].tolist(),'Profit by Stock','profit_by_stock.png')
+        if p: chart_paths.append(p)
+        p=save_line(monthly['Month'].tolist(),monthly['Profit'].tolist(),'Monthly Profit Trend','monthly_profit.png')
+        if p: chart_paths.append(p)
+
+        story.append(PageBreak())
+        story.append(Paragraph('Analytics Charts',h2))
+        for cp in chart_paths:
+            story.append(RLImage(cp,width=250*mm,height=90*mm))
+            story.append(Spacer(1,3*mm))
+
+        story.append(PageBreak())
+        story.append(Paragraph('Detailed Transactions',h2))
+        rows=[['Name','Stock','Sell Date','Qty','Buy','Sell','Profit/Share','Total Profit']]
+        for _,r in df.iterrows():
+            rows.append([
+                r['Name'],r['Stock Name'],
+                pd.to_datetime(r['Sell Date']).strftime('%d %b %Y'),
+                f"{int(r['Quantity']):,}",
+                money(r['Buying Price']),money(r['Selling Price']),
+                money(r['Profit per Share']),money(r['Total Profit'])
+            ])
+        tb=Table(rows,repeatRows=1,colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm])
+        tb.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
+            ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+            ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+            ('GRID',(0,0),(-1,-1),.3,colors.grey),
+            ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F5F8FA')]),
+            ('FONTSIZE',(0,0),(-1,-1),8),
+            ('ALIGN',(2,1),(-1,-1),'RIGHT')
+        ]))
+        story += [
+            tb,
+            Spacer(1,4*mm),
+            Paragraph(
+                'Profit per Share = Selling Price − Buying Price. '
+                'Total Profit = Profit per Share × Quantity. '
+                'No brokerage, STT, GST, taxes, or other charges are included.',
+                small
+            )
+        ]
+        doc.build(story)
+
+    return out.getvalue()
+
 
 init(); df=getdf(); st.title('📈 Stock Profit Tracker Pro'); st.caption('Local-first stock transaction tracker with automatic calculations, audit checks, Excel and PDF reports.')
 with st.sidebar:
