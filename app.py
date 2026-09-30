@@ -17,6 +17,35 @@ from reportlab.lib.utils import ImageReader
 
 APP_DIR=Path(__file__).resolve().parent; DB=APP_DIR/'stock_tracker.db'
 st.set_page_config(page_title='Stock Profit Tracker Pro',page_icon='📈',layout='wide')
+
+st.markdown("""
+<style>
+/* Make profit the primary visual KPI */
+[data-testid="stMetric"]:has([data-testid="stMetricLabel"] p:first-child) {
+    transition: transform 0.15s ease;
+}
+
+.profit-highlight {
+    border: 2px solid #2e7d32 !important;
+    border-radius: 12px !important;
+    padding: 12px 14px !important;
+    background: #eef8ef !important;
+}
+.profit-highlight [data-testid="stMetricLabel"] {
+    font-weight: 700 !important;
+    color: #1b5e20 !important;
+}
+.profit-highlight [data-testid="stMetricValue"] {
+    font-size: 2.15rem !important;
+    font-weight: 800 !important;
+    color: #1b5e20 !important;
+}
+.profit-table-cell {
+    font-weight: 800 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <style>
 /* Responsive layout for phone screens */
