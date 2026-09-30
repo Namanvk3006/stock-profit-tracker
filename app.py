@@ -17,42 +17,70 @@ from reportlab.lib.utils import ImageReader
 
 APP_DIR=Path(__file__).resolve().parent; DB=APP_DIR/'stock_tracker.db'
 st.set_page_config(page_title='Stock Profit Tracker Pro',page_icon='📈',layout='wide')
-
 st.markdown("""
 <style>
+/* Responsive layout for phone screens */
 @media (max-width: 640px) {
-    div[data-baseweb="tab-list"] {
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        gap: 0 !important;
-        scrollbar-width: none !important;
-        -webkit-overflow-scrolling: touch !important;
-        width: 100% !important;
+    /* Main content */
+    [data-testid="stMainBlockContainer"] {
+        padding-left: 0.65rem !important;
+        padding-right: 0.65rem !important;
     }
 
-    div[data-baseweb="tab-list"]::-webkit-scrollbar {
+    /* Keep Streamlit tabs in a single non-overlapping row */
+    div[data-testid="stTabs"] {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    div[data-testid="stTabs"] > div:first-child {
+        width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scrollbar-width: none !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    div[data-testid="stTabs"] > div:first-child::-webkit-scrollbar {
         display: none !important;
     }
 
-    div[data-baseweb="tab-list"] > button {
-        flex: 0 0 auto !important;
-        white-space: nowrap !important;
-        min-width: max-content !important;
-        padding-left: 10px !important;
-        padding-right: 10px !important;
-        font-size: 13px !important;
+    div[data-testid="stTabs"] [role="tablist"] {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        width: max-content !important;
+        min-width: 100% !important;
+        gap: 0 !important;
     }
 
-    div[data-baseweb="tab"] {
+    div[data-testid="stTabs"] [role="tab"] {
         flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
         white-space: nowrap !important;
+        padding: 0.45rem 0.55rem !important;
+        margin: 0 !important;
+        font-size: 0.82rem !important;
     }
 
-    section[data-testid="stMain"] {
-        padding-left: 0.65rem !important;
-        padding-right: 0.65rem !important;
+    /* Prevent metric cards from forcing horizontal overflow */
+    div[data-testid="stMetric"] {
+        min-width: 0 !important;
+        overflow: hidden !important;
+    }
+
+    div[data-testid="stMetricValue"] {
+        font-size: 1.35rem !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    /* Tables can scroll locally instead of widening the whole page */
+    [data-testid="stDataFrame"] {
+        max-width: 100% !important;
+        overflow-x: auto !important;
     }
 }
 </style>
