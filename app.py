@@ -170,8 +170,7 @@ def pdf(df):
 
     inv=float((df['Buying Price']*df['Quantity']).sum()) if len(df) else 0
     sales=float((df['Selling Price']*df['Quantity']).sum()) if len(df) else 0
-    
-# Dashboard filters — defaults show the complete dataset.
+    # Dashboard filters — defaults show the complete dataset.
 with st.expander('🎛️ Dashboard Filters', expanded=False):
     view_df=df.copy()
     if len(df):
@@ -257,6 +256,7 @@ if len(view_df):
     q2.info(f'👤 **Top Person by Profit**\n\n{best_person}\n\n{money(best_person_profit)}')
     q3.info(f'🚀 **Best Single Trade**\n\n{best_trade["Stock Name"]}\n\n{money(best_trade["Total Profit"])}')
     q4.info(f'📅 **Latest Sale Date**\n\n{latest_date}\n\n{transactions:,} transaction(s) in view')
+
 
 t1,t2,t3=st.tabs(['📋 Transactions','📊 Analytics','📤 Export'])
 
