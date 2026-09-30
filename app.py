@@ -17,35 +17,6 @@ from reportlab.lib.utils import ImageReader
 
 APP_DIR=Path(__file__).resolve().parent; DB=APP_DIR/'stock_tracker.db'
 st.set_page_config(page_title='Stock Profit Tracker Pro',page_icon='📈',layout='wide')
-
-st.markdown("""
-<style>
-/* Make profit the primary visual KPI */
-[data-testid="stMetric"]:has([data-testid="stMetricLabel"] p:first-child) {
-    transition: transform 0.15s ease;
-}
-
-.profit-highlight {
-    border: 2px solid #2e7d32 !important;
-    border-radius: 12px !important;
-    padding: 12px 14px !important;
-    background: #eef8ef !important;
-}
-.profit-highlight [data-testid="stMetricLabel"] {
-    font-weight: 700 !important;
-    color: #1b5e20 !important;
-}
-.profit-highlight [data-testid="stMetricValue"] {
-    font-size: 2.15rem !important;
-    font-weight: 800 !important;
-    color: #1b5e20 !important;
-}
-.profit-table-cell {
-    font-weight: 800 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 st.markdown("""
 <style>
 /* Responsive layout for phone screens */
@@ -494,7 +465,26 @@ sales=float((df['Selling Price']*df['Quantity']).sum()) if len(df) else 0
 qty=int(df['Quantity'].sum()) if len(df) else 0
 
 k=st.columns(5)
-k[0].metric('Total Profit',money(profit))
+
+with k[0]:
+    st.markdown(f'''
+    <div style="
+        border: 2px solid #2E7D32;
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: linear-gradient(135deg, #EAF7EC, #F5FBF6);
+        box-shadow: 0 2px 8px rgba(46,125,50,0.14);
+        min-height: 92px;
+    ">
+        <div style="font-size: 0.82rem; font-weight: 700; color: #1B5E20; margin-bottom: 5px;">
+            💰 TOTAL PROFIT
+        </div>
+        <div style="font-size: 1.65rem; line-height: 1.15; font-weight: 900; color: #1B5E20; white-space: nowrap;">
+            {money(profit)}
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
 k[1].metric('Investment',money(inv))
 k[2].metric('Sales Value',money(sales))
 k[3].metric('Quantity',f'{qty:,}')
@@ -506,7 +496,12 @@ with t1:
     if len(df):
         v=df.copy()
         v['Sell Date']=pd.to_datetime(v['Sell Date']).dt.strftime('%d %b %Y')
-        st.dataframe(v.drop(columns=['ID']),use_container_width=True,hide_index=True)
+        v=v.drop(columns=['ID'])
+        styled_v=v.style.set_properties(
+            subset=['Profit per Share','Total Profit'],
+            **{'font-weight':'800'}
+        )
+        st.dataframe(styled_v,use_container_width=True,hide_index=True)
 
         if is_admin:
             opts={f"#{int(r['ID'])} — {r['Stock Name']} — {r['Sell Date']} — {money(r['Total Profit'])}":int(r['ID']) for _,r in df.iterrows()}
