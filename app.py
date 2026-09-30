@@ -56,15 +56,25 @@ def excel(df):
         for row in ws.iter_rows(min_row=2):
             row[2].number_format='dd mmm yyyy'; row[3].number_format='#,##0'
             for j in [4,5,6,7]: row[j].number_format='₹#,##0.00'
-        tr=ws.max_row+2; ws.cell(tr,1,'TOTAL'); ws.cell(tr,8,f'=SUM(H2:H{tr-2})'); ws.cell(tr,8).number_format='₹#,##0.00'
-        for c in ws[tr]: c.font=Font(bold=True); c.fill=PatternFill('solid',fgColor='E2F0D9')
+        tr=ws.max_row+2
+        ws.cell(tr,1,'TOTAL')
+        ws.cell(tr,4,int(x['Quantity'].sum()))
+        ws.cell(tr,5,float((x['Buying Price']*x['Quantity']).sum()))
+        ws.cell(tr,6,float((x['Selling Price']*x['Quantity']).sum()))
+        ws.cell(tr,7,'')
+        ws.cell(tr,8,float(x['Total Profit'].sum()))
+        for col in [5,6,8]:
+            ws.cell(tr,col).number_format='₹#,##0.00'
+        for c in ws[tr]:
+            c.font=Font(bold=True); c.fill=PatternFill('solid',fgColor='E2F0D9')
         for i,wid in enumerate([14,24,16,12,17,17,19,17],1): ws.column_dimensions[get_column_letter(i)].width=wid
         ws.freeze_panes='A2'; ws.auto_filter.ref=f'A1:H{tr-2}'
         s=wb.create_sheet('Summary'); inv=float((x['Buying Price']*x['Quantity']).sum()); sales=float((x['Selling Price']*x['Quantity']).sum()); profit=float(x['Total Profit'].sum())
         vals=[['Stock Profit Tracker — Summary',''],['Transactions',len(x)],['Total Quantity',int(x['Quantity'].sum())],['Total Investment',inv],['Total Sales Value',sales],['Total Profit',profit]]
         for r in vals:s.append(r)
         for c in s[1]:c.fill=fill;c.font=Font(color='FFFFFF',bold=True,size=14)
-        for r in range(2,s.max_row+1):s.cell(r,2).number_format='₹#,##0.00'
+        for r in range(4,s.max_row+1):
+            s.cell(r,2).number_format='₹#,##0.00'
         s.column_dimensions['A'].width=26;s.column_dimensions['B'].width=22
     return out.getvalue()
 
@@ -84,6 +94,10 @@ def pdf(df):
     title=ParagraphStyle('t',parent=stl['Title'],alignment=TA_CENTER,fontSize=18)
     h2=ParagraphStyle('h2',parent=stl['Heading2'],fontSize=13,spaceBefore=5*mm,spaceAfter=2*mm)
     small=ParagraphStyle('small',parent=stl['BodyText'],fontSize=8)
+    # ReportLab's built-in Helvetica does not contain the Indian rupee glyph.
+    # Use "Rs." in the PDF to avoid missing-glyph black boxes.
+    def pdf_money(x):
+        return f"Rs. {x:,.2f}"
 
     inv=float((df['Buying Price']*df['Quantity']).sum()) if len(df) else 0
     sales=float((df['Selling Price']*df['Quantity']).sum()) if len(df) else 0
@@ -102,7 +116,7 @@ def pdf(df):
     # KPI summary
     sm=Table([
         ['Transactions','Quantity','Investment','Sales Value','Total Profit','Return'],
-        [str(len(df)),f"{qty:,}",money(inv),money(sales),money(profit),f"{ret:.2f}%"]
+        [str(len(df)),f"{qty:,}",pdf_money(inv),pdf_money(sales),pdf_money(profit),f"{ret:.2f}%"]
     ],colWidths=[30*mm,30*mm,45*mm,45*mm,45*mm,30*mm])
     sm.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
@@ -170,9 +184,9 @@ def pdf(df):
                 str(r[first_col]),
                 f"{int(r['Transactions']):,}",
                 f"{int(r['Quantity']):,}",
-                money(r['Investment']),
-                money(r['Sales']),
-                money(r['Profit'])
+                pdf_money(r['Investment']),
+                pdf_money(r['Sales']),
+                pdf_money(r['Profit'])
             ])
         tb=Table(rows,colWidths=widths,repeatRows=1)
         tb.setStyle(TableStyle([
@@ -248,9 +262,16 @@ def pdf(df):
                 r['Name'],r['Stock Name'],
                 pd.to_datetime(r['Sell Date']).strftime('%d %b %Y'),
                 f"{int(r['Quantity']):,}",
-                money(r['Buying Price']),money(r['Selling Price']),
-                money(r['Profit per Share']),money(r['Total Profit'])
+                pdf_money(r['Buying Price']),pdf_money(r['Selling Price']),
+                pdf_money(r['Profit per Share']),pdf_money(r['Total Profit'])
             ])
+        rows.append([
+            'TOTAL','', '',
+            f"{qty:,}", '',
+            pdf_money(sales/qty) if qty else 'Rs. 0.00',
+            '',
+            pdf_money(profit)
+        ])
         tb=Table(rows,repeatRows=1,colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm])
         tb.setStyle(TableStyle([
             ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1F4E78')),
@@ -259,7 +280,10 @@ def pdf(df):
             ('GRID',(0,0),(-1,-1),.3,colors.grey),
             ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F5F8FA')]),
             ('FONTSIZE',(0,0),(-1,-1),8),
-            ('ALIGN',(2,1),(-1,-1),'RIGHT')
+            ('ALIGN',(2,1),(-1,-1),'RIGHT'),
+            ('BACKGROUND',(0,-1),(-1,-1),colors.HexColor('#E2F0D9')),
+            ('FONTNAME',(0,-1),(-1,-1),'Helvetica-Bold'),
+            ('LINEABOVE',(0,-1),(-1,-1),.8,colors.HexColor('#1F4E78'))
         ]))
         story += [
             tb,
