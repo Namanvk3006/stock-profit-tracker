@@ -219,8 +219,8 @@ def pdf(df):
             r['Name'],r['Stock Name'],
             pd.to_datetime(r['Sell Date']).strftime('%d %b %Y'),
             f"{int(r['Quantity']):,}",
-            money(r['Buying Price']),money(r['Selling Price']),
-            money(r['Profit per Share']),money(r['Total Profit'])
+            pdf_money(r['Buying Price']),pdf_money(r['Selling Price']),
+            pdf_money(r['Profit per Share']),pdf_money(r['Total Profit'])
         ])
     tb=Table(rows,repeatRows=1,colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm])
     tb.setStyle(TableStyle([
@@ -233,7 +233,7 @@ def pdf(df):
         ('ALIGN',(2,1),(-1,-1),'RIGHT')
     ]))
     total_row=Table(
-        [['TOTAL','','',f"{qty:,}",'', '', '',money(profit)]],
+        [['TOTAL','','',f"{qty:,}",'', '', '',pdf_money(profit)]],
         colWidths=[23*mm,42*mm,29*mm,18*mm,28*mm,28*mm,35*mm,38*mm]
     )
     total_row.setStyle(TableStyle([
@@ -324,7 +324,7 @@ def pdf(df):
     with tempfile.TemporaryDirectory() as td:
         chart_paths=[]
 
-        def save_bar(labels, values, title_text, filename, ylabel='Profit (₹)'):
+        def save_bar(labels, values, title_text, filename, ylabel='Profit (Rs.)'):
             if len(labels)==0:
                 return None
             fig,ax=plt.subplots(figsize=(8.5,3.2))
@@ -344,7 +344,7 @@ def pdf(df):
             fig,ax=plt.subplots(figsize=(8.5,3.2))
             ax.plot(labels, values, marker='o')
             ax.set_title(title_text)
-            ax.set_ylabel('Profit (₹)')
+            ax.set_ylabel('Profit (Rs.)')
             ax.tick_params(axis='x',rotation=35)
             fig.tight_layout()
             path=os.path.join(td,filename)
@@ -542,7 +542,12 @@ with t1:
         styled_v=v.style.set_properties(
             subset=['Profit per Share','Total Profit'],
             **{'font-weight':'800'}
-        )
+        ).format({
+            'Buying Price':'{:,.0f}',
+            'Selling Price':'{:,.0f}',
+            'Profit per Share':'{:,.0f}',
+            'Total Profit':'{:,.0f}'
+        })
         st.dataframe(styled_v,use_container_width=True,hide_index=True)
 
         if is_admin:
@@ -582,8 +587,15 @@ with t2:
         )
         summary['Return %']=(summary['Profit']/summary['Investment'].replace(0,pd.NA)*100).round(1)
         summary=summary.sort_values('Profit',ascending=False)
-        st.dataframe(summary[['Stock Name','Transactions','Quantity','Investment','Sales','Profit','Return %']],
-                     use_container_width=True,hide_index=True)
+        st.dataframe(
+            summary[['Stock Name','Transactions','Quantity','Investment','Sales','Profit','Return %']].style.format({
+                'Investment':'{:,.0f}',
+                'Sales':'{:,.0f}',
+                'Profit':'{:,.0f}',
+                'Return %':'{:.1f}%'
+            }),
+            use_container_width=True,hide_index=True
+        )
 
 
         audit=view_df.copy()
@@ -594,7 +606,12 @@ with t2:
         st.subheader('Calculation Audit')
         st.dataframe(
             audit[['Stock Name','Profit per Share','Calculated Profit/Share','Profit/Share OK',
-                   'Total Profit','Calculated Total Profit','Total Profit OK']],
+                   'Total Profit','Calculated Total Profit','Total Profit OK']].style.format({
+                'Profit per Share':'{:,.0f}',
+                'Calculated Profit/Share':'{:,.0f}',
+                'Total Profit':'{:,.0f}',
+                'Calculated Total Profit':'{:,.0f}'
+            }),
             use_container_width=True,hide_index=True
         )
         if audit['Profit/Share OK'].all() and audit['Total Profit OK'].all():
